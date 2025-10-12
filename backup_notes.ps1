@@ -41,7 +41,7 @@ try {
     Set-Location $sourceFolder
     Log 'INFO' "Changed directory to $PWD"
 } catch {
-    Log 'ERROR' "Failed to change directory to $sourceFolder: $($_.Exception.Message)"
+    Log 'ERROR' "Failed to change directory to $($sourceFolder): $($_.Exception.Message)"
     Exit 1
 }
 
