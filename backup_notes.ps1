@@ -38,10 +38,17 @@ try {
 Log 'INFO' "Starting backup script. Script path: $PSScriptRoot"
 
 try {
-    Set-Location $sourceFolder
-    Log 'INFO' "Changed directory to $PWD"
+    # Don't change the current working directory. Verify the repo path exists and warn if .git is missing.
+    if (-not (Test-Path $sourceFolder)) {
+        Log 'ERROR' "Source folder not found: $($sourceFolder)"
+        Exit 1
+    }
+    if (-not (Test-Path (Join-Path $sourceFolder '.git'))) {
+        Log 'WARN' "No .git directory detected in $($sourceFolder). Git commands may fail or operate on a bare repo."
+    }
+    Log 'INFO' "Using repository path: $($sourceFolder)"
 } catch {
-    Log 'ERROR' "Failed to change directory to $($sourceFolder): $($_.Exception.Message)"
+    Log 'ERROR' "Failed to validate repository path $($sourceFolder): $($_.Exception.Message)"
     Exit 1
 }
 
@@ -51,8 +58,9 @@ $commitMessage = "backup $dateTime"
 Log 'INFO' "Commit message: $commitMessage"
 
 # Stage changes
-Log 'INFO' "Running: git add ."
-$addOutput = & git add . 2>&1
+$logCmdAdd = "git -C $sourceFolder add ."
+Log 'INFO' "Running: $logCmdAdd"
+$addOutput = & git -C $sourceFolder add . 2>&1
 $addExit = $LASTEXITCODE
 if ($addOutput) { Log 'DEBUG' "git add output: $($addOutput -join ' | ')" }
 if ($addExit -ne 0) {
@@ -61,7 +69,7 @@ if ($addExit -ne 0) {
 }
 
 # Check if any changes are in the index (staged)
-$diffOutput = & git diff --cached --name-only 2>&1
+$diffOutput = & git -C $sourceFolder diff --cached --name-only 2>&1
 $diffExit = $LASTEXITCODE
 if ($diffExit -ne 0) {
     Log 'ERROR' "git diff --cached failed: $($diffOutput -join ' | ')"
@@ -71,8 +79,9 @@ if ($diffExit -ne 0) {
 if ($diffOutput -and $diffOutput.Trim() -ne '') {
     Log 'INFO' "Staged files: $diffOutput"
 
-    Log 'INFO' "Running: git commit -m '$commitMessage'"
-    $commitOutput = & git commit -m $commitMessage 2>&1
+    $logCmdCommit = "git -C $sourceFolder commit -m '$commitMessage'"
+    Log 'INFO' "Running: $logCmdCommit"
+    $commitOutput = & git -C $sourceFolder commit -m $commitMessage 2>&1
     $commitExit = $LASTEXITCODE
     if ($commitOutput) { Log 'DEBUG' "git commit output: $($commitOutput -join ' | ')" }
     if ($commitExit -ne 0) {
@@ -80,8 +89,9 @@ if ($diffOutput -and $diffOutput.Trim() -ne '') {
         Exit $commitExit
     }
 
-    Log 'INFO' "Running: git push"
-    $pushOutput = & git push 2>&1
+    $logCmdPush = "git -C $sourceFolder push"
+    Log 'INFO' "Running: $logCmdPush"
+    $pushOutput = & git -C $sourceFolder push 2>&1
     $pushExit = $LASTEXITCODE
     if ($pushOutput) { Log 'DEBUG' "git push output: $($pushOutput -join ' | ')" }
     if ($pushExit -ne 0) {
