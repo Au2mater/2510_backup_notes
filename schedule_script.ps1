@@ -28,8 +28,10 @@ if ($existingTask) {
     }
 }
 
-# Create the action to run PowerShell with the script
-$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File '$scriptPath'"
+# Create the action to run PowerShell with the script.
+# Use -WindowStyle Hidden so a visible terminal is not shown. We rely on the script
+# using $PSScriptRoot for paths (so Start-in is not required).
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`""
 
 # Create triggers for the task
 $triggerLogOn = New-ScheduledTaskTrigger -AtLogOn
@@ -44,33 +46,19 @@ $triggerHourly = New-ScheduledTaskTrigger -Once -At $nextMidnight -RepetitionInt
 # Create settings for the task
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 
-# Register the scheduled task
+# Register the scheduled task for the current user only (Interactive logon)
 try {
     $triggers = @($triggerLogOn, $triggerHourly) | Where-Object { $_ -ne $null }
     if (-not $triggers) { throw "No valid triggers to register." }
 
-    if (Test-IsElevated) {
-        # Register as SYSTEM when elevated
-        Register-ScheduledTask -Action $action -Trigger $triggers -Settings $settings -TaskName $taskName -User "SYSTEM" -RunLevel Highest -ErrorAction Stop
-        Write-Host "Scheduled task '$taskName' created successfully (registered as SYSTEM)."
-    } else {
-        # Register for the current user when not elevated. Create a Principal for the current user and
-        # register the task via New-ScheduledTask -> Register-ScheduledTask -InputObject which avoids needing
-        # to provide credentials for Interactive logon type.
-        try {
-            $currentUserId = "${env:USERDOMAIN}\${env:USERNAME}"
-            $principal = New-ScheduledTaskPrincipal -UserId $currentUserId -LogonType Interactive -RunLevel Limited
-            $taskDefinition = New-ScheduledTask -Action $action -Trigger $triggers -Settings $settings -Principal $principal
-            Register-ScheduledTask -TaskName $taskName -InputObject $taskDefinition -ErrorAction Stop
-            Write-Host "Scheduled task '$taskName' created successfully (registered for the current user: $currentUserId)."
-            Write-Host "Note: To register the task as SYSTEM, re-run this script in an elevated PowerShell session."
-        } catch {
-            Write-Warning "Attempt to register task for current user failed: $_"
-            Write-Error "If you need the task to run as SYSTEM or with highest privileges, re-run this script as Administrator and try again."
-            exit 1
-        }
-    }
+    # Build principal for current user with Interactive logon so the task only runs when user is logged on
+    $currentUserId = "${env:USERDOMAIN}\${env:USERNAME}"
+    $principal = New-ScheduledTaskPrincipal -UserId $currentUserId -LogonType Interactive -RunLevel Limited
+    $taskDefinition = New-ScheduledTask -Action $action -Trigger $triggers -Settings $settings -Principal $principal
+    Register-ScheduledTask -TaskName $taskName -InputObject $taskDefinition -ErrorAction Stop
+
+    Write-Host "Scheduled task '$taskName' created successfully for current user: $currentUserId (runs only when user is logged on)."
 } catch {
-    Write-Error "Failed to create scheduled task '$taskName': $_"
+    Write-Error "Failed to create scheduled task '$taskName' for current user: $_"
     throw
 }

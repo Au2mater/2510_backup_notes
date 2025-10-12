@@ -1,8 +1,14 @@
 # Path to the notes folder (Git repository)
 $sourceFolder = "C:\Users\Bruger\OneDrive\Notes"
 
-# Log file will live next to this script
-$logPath = Join-Path $PSScriptRoot 'backup_notes.log'
+# Log file will live next to this script. Use $PSScriptRoot so path is correct when scheduled.
+$logDir = $PSScriptRoot
+$logPath = Join-Path $logDir 'backup_notes.log'
+
+# Ensure the log directory exists (Task Scheduler may start with a different working dir)
+if (-not (Test-Path $logDir)) {
+    New-Item -Path $logDir -ItemType Directory -Force | Out-Null
+}
 
 function Log {
     param(
@@ -12,10 +18,19 @@ function Log {
     $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
     $line = "$timestamp [$Level] $Message"
     try {
-        Add-Content -Path $logPath -Value $line
+        Add-Content -Path $logPath -Value $line -ErrorAction Stop
     } catch {
-        # If logging to file fails, still write to host so the user sees something
-        Write-Host "${timestamp} [ERROR] Failed to write log: $($_.Exception.Message)"
+        # If logging to file fails, write a clear error and try a fallback to TEMP
+        $err = $_.Exception.Message
+        $fallback = Join-Path $env:TEMP "backup_notes_fallback.log"
+    $fallbackLine = "$timestamp [FALLBACK] Failed to write ${logPath}: ${err} -- Fallback log entry"
+        try {
+            Add-Content -Path $fallback -Value $fallbackLine -ErrorAction Stop
+            Write-Host "$fallbackLine (wrote to $fallback)"
+        } catch {
+            Write-Host "$timestamp [ERROR] Failed to write fallback log as well: $($_.Exception.Message)"
+        }
+        Write-Host "${timestamp} [ERROR] Failed to write log: $err"
     }
     Write-Host $line
 }
@@ -26,7 +41,7 @@ try {
         $size = (Get-Item $logPath).Length
         if ($size -gt 5MB) {
             $archiveName = "backup_notes_$((Get-Date).ToString('yyyyMMddHHmmss')).log"
-            $archivePath = Join-Path $PSScriptRoot $archiveName
+            $archivePath = Join-Path $logDir $archiveName
             Move-Item -Path $logPath -Destination $archivePath -ErrorAction SilentlyContinue
             Log 'INFO' "Rotated log to $archiveName"
         }
@@ -35,7 +50,12 @@ try {
     Log 'WARN' "Log rotation failed: $($_.Exception.Message)"
 }
 
+# Startup diagnostics to help Task Scheduler troubleshooting
 Log 'INFO' "Starting backup script. Script path: $PSScriptRoot"
+Log 'DEBUG' "Current user: $([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)"
+Log 'DEBUG' "PWD: $(Get-Location)"
+Log 'DEBUG' "Process: $([System.Diagnostics.Process]::GetCurrentProcess().ProcessName) (Id=$([System.Diagnostics.Process]::GetCurrentProcess().Id))"
+Log 'DEBUG' "Env: USERPROFILE=$env:USERPROFILE; TEMP=$env:TEMP; ONE_DRIVE=$env:OneDrive; ProgramData=$env:ProgramData"
 
 try {
     # Don't change the current working directory. Verify the repo path exists and warn if .git is missing.
