@@ -28,10 +28,21 @@ if ($existingTask) {
     }
 }
 
-# Create the action to run PowerShell with the script.
-# Use -WindowStyle Hidden so a visible terminal is not shown. We rely on the script
-# using $PSScriptRoot for paths (so Start-in is not required).
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`""
+# Create the action to run the script fully hidden using a small VBScript wrapper.
+# The wrapper run_hidden.vbs will run PowerShell with no visible window.
+$vbsPath = Join-Path (Split-Path -Path $scriptPath -Parent) 'run_hidden.vbs'
+# Ensure the vbs exists (if not, write it). It should live next to the scripts.
+if (-not (Test-Path $vbsPath)) {
+    $vbsContent = @'
+Set WshShell = CreateObject("WScript.Shell")
+cmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File """ & WScript.Arguments.Item(0) & """"
+WshShell.Run cmd, 0, False
+'@
+    $vbsContent | Out-File -FilePath $vbsPath -Encoding ascii -Force
+}
+
+# Action: run wscript.exe with the VBS wrapper passing the script path as argument
+$action = New-ScheduledTaskAction -Execute 'wscript.exe' -Argument "`"$vbsPath`" `"$scriptPath`""
 
 # Create triggers for the task
 $triggerLogOn = New-ScheduledTaskTrigger -AtLogOn
