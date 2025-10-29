@@ -1,7 +1,7 @@
 # List of notes folders (Git repositories)
 $sourceFolders = @(
     "C:\Users\Bruger\OneDrive\Notes",
-    "C:\Users\Bruger\OneDrive\Notes Work"
+    "C:\Users\Bruger\OneDrive\Notes_Work"
 )
 
 # Log file will live next to this script. Use $PSScriptRoot so path is correct when scheduled.
@@ -75,6 +75,28 @@ foreach ($sourceFolder in $sourceFolders) {
         Log 'INFO' "Using repository path: $($sourceFolder)"
     } catch {
         Log 'ERROR' "Failed to validate repository path $($sourceFolder): $($_.Exception.Message)"
+        continue
+    }
+
+
+    # Fetch and pull latest changes before backup
+    $logCmdFetch = "git -C $sourceFolder fetch --all"
+    Log 'INFO' "Running: $logCmdFetch"
+    $fetchOutput = & git -C $sourceFolder fetch --all 2>&1
+    $fetchExit = $LASTEXITCODE
+    if ($fetchOutput) { Log 'DEBUG' "git fetch output: $($fetchOutput -join ' | ')" }
+    if ($fetchExit -ne 0) {
+        Log 'ERROR' "git fetch failed with exit code $fetchExit"
+        continue
+    }
+
+    $logCmdPull = "git -C $sourceFolder pull"
+    Log 'INFO' "Running: $logCmdPull"
+    $pullOutput = & git -C $sourceFolder pull 2>&1
+    $pullExit = $LASTEXITCODE
+    if ($pullOutput) { Log 'DEBUG' "git pull output: $($pullOutput -join ' | ')" }
+    if ($pullExit -ne 0) {
+        Log 'ERROR' "git pull failed with exit code $pullExit"
         continue
     }
 
