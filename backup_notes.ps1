@@ -1,12 +1,35 @@
-# List of notes folders (Git repositories)
-$sourceFolders = @(
-    "C:\Users\Bruger\OneDrive\Notes",
-    "C:\Users\Bruger\OneDrive\Notes_Work"
-)
+# Dot-source shared env loader (if available) and load .env
+$helper = Join-Path $PSScriptRoot 'lib\env.ps1'
+if (Test-Path $helper) { . $helper } else { Write-Verbose "Load-DotEnv helper not found: $helper" }
 
-# Log file will live next to this script. Use $PSScriptRoot so path is correct when scheduled.
-$logDir = $PSScriptRoot
-$logPath = Join-Path $logDir 'backup_notes.log'
+$envPath = Join-Path $PSScriptRoot '.env'
+Load-DotEnv -Path $envPath
+
+# If .env provided numbered sourceFolder_* variables, gather them into $sourceFolders
+$sourceFolders = @()
+$i = 1
+while ($true) {
+    $varName = "sourceFolder_$i"
+    $v = $null
+    try { $v = Get-Variable -Name $varName -Scope Script -ErrorAction SilentlyContinue } catch {}
+    if ($null -eq $v) { break }
+    $val = (Get-Variable -Name $varName -Scope Script -ValueOnly)
+    if ($val) { $sourceFolders += $val }
+    $i += 1
+}
+# Fallback: support a single 'sourceFolders' variable (comma/semicolon separated)
+if ($sourceFolders.Count -eq 0) {
+    try { $sf = Get-Variable -Name 'sourceFolders' -Scope Script -ValueOnly -ErrorAction SilentlyContinue } catch { $sf = $null }
+    if ($sf) { $sourceFolders = ($sf -split '[,;]') | ForEach-Object { $_.Trim() } }
+}
+
+# Load log path from .env if provided, otherwise default to a log next to the script
+if ($null -ne (Get-Variable -Name 'logPath' -Scope Script -ErrorAction SilentlyContinue)) {
+    $logPath = (Get-Variable -Name 'logPath' -Scope Script -ValueOnly)
+} else {
+    $logPath = Join-Path $PSScriptRoot 'backup_notes.log'
+}
+$logDir = Split-Path -Path $logPath -Parent
 
 # Ensure the log directory exists (Task Scheduler may start with a different working dir)
 if (-not (Test-Path $logDir)) {

@@ -1,6 +1,19 @@
-# Define the script path and task name
-$scriptPath = "C:\Users\Bruger\OneDrive\03_Resources\2510_backup_notes\backup_notes.ps1"  # Update with your script path
+# Define the task name and load configuration from .env
 $taskName = "GitBackupNotesTask"
+
+# Dot-source shared env loader (if available) and load .env
+$helper = Join-Path $PSScriptRoot 'lib\env.ps1'
+if (Test-Path $helper) { . $helper } else { Write-Verbose "Load-DotEnv helper not found: $helper" }
+
+$envPath = Join-Path $PSScriptRoot '.env'
+Load-DotEnv -Path $envPath
+
+# Use $scriptPath from .env if provided, otherwise fall back to the default path next to this script
+if ($null -ne (Get-Variable -Name 'scriptPath' -Scope Script -ErrorAction SilentlyContinue)) {
+    $scriptPath = (Get-Variable -Name 'scriptPath' -Scope Script -ValueOnly)
+} else {
+    $scriptPath = Join-Path $PSScriptRoot 'backup_notes.ps1'
+}
 
 function Test-IsElevated {
     $current = [Security.Principal.WindowsIdentity]::GetCurrent()
