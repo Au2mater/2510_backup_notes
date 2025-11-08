@@ -1,5 +1,5 @@
 # Define the task name and load configuration from .env
-$taskName = "GitBackupNotesTask"
+$taskName = "GitBackupNotesTask-User-${env:USERNAME}"
 
 # Dot-source shared env loader (if available) and load .env
 $helper = Join-Path $PSScriptRoot 'lib\env.ps1'
@@ -21,8 +21,8 @@ function Test-IsElevated {
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
-# Delete the task if it already exists. If we don't have permission to delete it, warn and continue.
-$existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+# Delete the task if it already exists for the current  user. If we don't have permission to delete it, warn and continue.
+$existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue | Where-Object { $_.Principal.UserId -eq "${env:USERNAME}" }
 if ($existingTask) {
     Write-Host "Task '$taskName' already exists. Attempting to delete it..."
     try {

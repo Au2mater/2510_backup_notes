@@ -11,8 +11,10 @@ if ($null -ne (Get-Variable -Name 'logPath' -Scope Script -ErrorAction SilentlyC
 	$logPath = Join-Path $PSScriptRoot 'backup_notes.log'
 }
 
-Start-ScheduledTask -TaskName 'GitBackupNotesTask'
-Get-ScheduledTaskInfo -TaskName 'GitBackupNotesTask'   # shows LastRunTime & LastTaskResult
+$taskName = "GitBackupNotesTask-User-${env:USERNAME}"
+
+Start-ScheduledTask -TaskName $taskName
+Get-ScheduledTaskInfo -TaskName $taskName   # shows LastRunTime & LastTaskResult
 # wait two seconds to allow the task to start and write to the log
 Start-Sleep -Seconds 2
 Get-Content $logPath -Tail 100
